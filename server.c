@@ -59,7 +59,7 @@ int main(int argc, char **argv)
 		close(sock);
 		exit (0);
 	}
-	printf("Sock: %d", sock);
+	puts("sock");
 
 	if(listen(sock,5)<0){		// listen on the socket, 5: max number of packets in the incoming queue
 		perror("listen");
@@ -87,8 +87,10 @@ int main(int argc, char **argv)
 		}
 		else {
 			/*Child code*/
+			puts("Before SSL_accept(ssl)");
 			if (SSL_accept(ssl) <= 0)
 				berr_exit("SSL accept error");
+			puts("After SSL_accept(ssl)");
 
 			int len;
 			char buf[256];

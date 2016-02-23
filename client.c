@@ -89,7 +89,6 @@ int main(int argc, char **argv)
 	addr.sin_addr=*(struct in_addr *) host_entry->h_addr_list[0];
 	addr.sin_family=AF_INET;
 	addr.sin_port=htons(port);
-
 	printf("Connecting to %s(%s):%d\n", host, inet_ntoa(addr.sin_addr),port);
 
 	/*open socket*/
@@ -111,10 +110,16 @@ int main(int argc, char **argv)
 	SSL *ssl = SSL_new(ctx);
 	BIO *sbio = BIO_new_socket(sock, BIO_NOCLOSE);
 	SSL_set_bio(ssl, sbio, sbio);
+	puts("Before SSL_connect(ssl)");
 	if(SSL_connect(ssl)<=0)
 		berr_exit(FMT_CONNECT_ERR);
-	if(check_cert(ssl,host))
+	puts("SSL_connect(ssl) finished!");
+
+	if(check_cert(ssl, host)){
+		puts("check_cert(ssl, host) finished!");
 		http_request(ssl);
+		puts("http_request(ssl) finished!");
+	}
 
 	/* this is how you output something for the marker to pick up */
 	printf(FMT_OUTPUT, secret, buf);
