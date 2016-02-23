@@ -7,6 +7,8 @@
 #include <netdb.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <openssl/ssl.h>
+#include "common.h"
 
 #define HOST "localhost"
 #define PORT 8765
@@ -20,9 +22,37 @@
 #define FMT_NO_VERIFY "ECE568-CLIENT: Certificate does not verify\n"
 #define FMT_INCORRECT_CLOSE "ECE568-CLIENT: Premature close\n"
 
+int check_cert(ssl,host)
+	SSL *ssl;
+	char *host;
+{
+	X509 *peer;
+	char peer_CN[256];
+
+	if(SSL_get_verify_result(ssl)!=X509_V_OK)
+		berr_exit("Certificate doesn't verify");
+
+	/*Check the cert chain. The chain length
+	 *       is automatically checked by OpenSSL when
+	 *             we set the verify depth in the ctx */
+
+	/*Check the common name*/
+	peer=SSL_get_peer_certificate(ssl);
+	X509_NAME_get_text_by_NID (X509_get_subject_name(peer), NID_commonName, peer_CN, 256);
+	if(strcasecmp(peer_CN,host))
+		err_exit("Common name doesn't match host name");
+	return 1;
+}
+
+static int http_request(ssl)
+	SSL *ssl;
+{
+	return(0);
+}
+
 int main(int argc, char **argv)
 {
-	int len, sock, port=PORT;
+	int sock, port=PORT;
 	char *host=HOST;
 	struct sockaddr_in addr;
 	struct hostent *host_entry;
@@ -30,7 +60,6 @@ int main(int argc, char **argv)
 	char *secret = "What's the question?";
 
 	/*Parse command line arguments*/
-
 	switch(argc){
 		case 1:
 			break;
@@ -64,19 +93,32 @@ int main(int argc, char **argv)
 	printf("Connecting to %s(%s):%d\n", host, inet_ntoa(addr.sin_addr),port);
 
 	/*open socket*/
-
 	if((sock=socket(AF_INET, SOCK_STREAM, IPPROTO_TCP))<0)
 		perror("socket");
 	if(connect(sock,(struct sockaddr *)&addr, sizeof(addr))<0)
 		perror("connect");
 
-	send(sock, secret, strlen(secret),0);
-	len = recv(sock, &buf, 255, 0);
-	buf[len]='\0';
+	/* IN-SECURE COMMUNICATION. */
+	/* send(sock, secret, strlen(secret),0); */
+	/* len = recv(sock, &buf, 255, 0); */
+	/* buf[len]='\0'; */
+
+	/* SECURE COMMUNICATION. */
+	SSL_CTX *ctx = initialize_ctx("./alice.pem", "password");
+	SSL_CTX_set_options(ctx, SSL_OP_NO_SSLv2);		// only enable SSLv3 and TLSv1
+	/* Connect the SSL socket */
+	SSL *ssl = SSL_new(ctx);
+	BIO *sbio = BIO_new_socket(sock, BIO_NOCLOSE);
+	SSL_set_bio(ssl, sbio, sbio);
+	if(SSL_connect(ssl)<=0)
+		berr_exit("SSL connect error");
+	if(check_cert(ssl,host))
+		http_request(ssl);
 
 	/* this is how you output something for the marker to pick up */
 	printf(FMT_OUTPUT, secret, buf);
 
+	destroy_ctx(ctx);
 	close(sock);
 	return 1;
 }
