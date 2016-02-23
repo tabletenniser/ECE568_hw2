@@ -16,6 +16,8 @@
 
 #include <openssl/ssl.h>
 
+#define CA_LIST "./568ca.pem"
+
 extern BIO *bio_err;
 int berr_exit (char *string);
 int err_exit(char *string);

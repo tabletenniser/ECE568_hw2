@@ -11,6 +11,8 @@
 #include "common.h"
 
 #define HOST "localhost"
+#define EXPECT_HOSTNAME "Bob's Server"
+#define EXPECT_EMAIL "ece568bob@ecf.utoronto.ca"
 #define PORT 8778
 
 /* use these strings to tell the marker what is happening */
@@ -22,15 +24,19 @@
 #define FMT_NO_VERIFY "ECE568-CLIENT: Certificate does not verify\n"
 #define FMT_INCORRECT_CLOSE "ECE568-CLIENT: Premature close\n"
 
-int check_cert(ssl,host)
+int check_cert(ssl,host,email)
 	SSL *ssl;
 	char *host;
+	char *email;
 {
 	X509 *peer;
 	char peer_CN[256];
+	char peer_email[256];
 
-	if(SSL_get_verify_result(ssl)!=X509_V_OK)
-		berr_exit("Certificate doesn't verify");
+	if(SSL_get_verify_result(ssl)!=X509_V_OK){
+		printf("SSL_get_verify_result(ssl): %ld", SSL_get_verify_result(ssl));
+		berr_exit(FMT_NO_VERIFY);
+	}
 
 	/*Check the cert chain. The chain length
 	 *       is automatically checked by OpenSSL when
@@ -39,8 +45,16 @@ int check_cert(ssl,host)
 	/*Check the common name*/
 	peer=SSL_get_peer_certificate(ssl);
 	X509_NAME_get_text_by_NID (X509_get_subject_name(peer), NID_commonName, peer_CN, 256);
-	if(strcasecmp(peer_CN,host))
-		err_exit("Common name doesn't match host name");
+	if(strcasecmp(peer_CN,host)){
+		printf("Expect name: %s; Got name: %s.", host, peer_CN);
+		err_exit(FMT_CN_MISMATCH);
+	}
+
+	X509_NAME_get_text_by_NID (X509_get_subject_name(peer), NID_pkcs9_emailAddress, peer_email, 256);
+	if(strcasecmp(peer_email, email)){
+		printf("Expect email: %s; Got email: %s.", email, peer_email);
+		err_exit(FMT_EMAIL_MISMATCH);
+	}
 	return 1;
 }
 
@@ -115,8 +129,8 @@ int main(int argc, char **argv)
 		berr_exit(FMT_CONNECT_ERR);
 	puts("SSL_connect(ssl) finished!");
 
-	if(check_cert(ssl, host)){
-		puts("check_cert(ssl, host) finished!");
+	if(check_cert(ssl, EXPECT_HOSTNAME, EXPECT_EMAIL)){
+		puts("check_cert(ssl, host, email) finished!");
 		http_request(ssl);
 		puts("http_request(ssl) finished!");
 	}
