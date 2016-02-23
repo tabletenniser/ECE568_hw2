@@ -69,9 +69,6 @@ int main(int argc, char **argv)
 	SSL_CTX *ctx = initialize_ctx("./bob.pem", "password");
 	/* SSL_CTX_set_options(ctx, SSL_OP_ALL);▸·▸···// enable for all of SSLv2, SSLv3 and TLSv1 */
 	SSL_CTX_set_cipher_list(ctx, "SHA1");		// TODO: check if SSLv2, SSLv3 and TLSv1 should be set here.
-	BIO *sbio = BIO_new_socket(s, BIO_NOCLOSE);
-	SSL *ssl = SSL_new(ctx);
-	SSL_set_bio(ssl, sbio, sbio);
 
 	while(1){
 		if((s=accept(sock, NULL, 0))<0){
@@ -87,6 +84,9 @@ int main(int argc, char **argv)
 		}
 		else {
 			/*Child code*/
+			BIO *sbio = BIO_new_socket(s, BIO_NOCLOSE);
+			SSL *ssl = SSL_new(ctx);
+			SSL_set_bio(ssl, sbio, sbio);
 			puts("Before SSL_accept(ssl)");
 			if (SSL_accept(ssl) <= 0)
 				berr_exit("SSL accept error");
