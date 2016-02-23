@@ -24,10 +24,11 @@
 #define FMT_NO_VERIFY "ECE568-CLIENT: Certificate does not verify\n"
 #define FMT_INCORRECT_CLOSE "ECE568-CLIENT: Premature close\n"
 
-int check_cert(ssl,host,email)
+int check_cert(ssl,host,email,certificate_issuer)
 	SSL *ssl;
 	char *host;
 	char *email;
+	char *certificate_issuer;
 {
 	X509 *peer;
 	char peer_CN[256];
@@ -50,17 +51,78 @@ int check_cert(ssl,host,email)
 		err_exit(FMT_CN_MISMATCH);
 	}
 
-	X509_NAME_get_text_by_NID (X509_get_subject_name(peer), NID_pkcs9_emailAddress, peer_email, 256);
-	if(strcasecmp(peer_email, email)){
-		printf("Expect email: %s; Got email: %s.", email, peer_email);
-		err_exit(FMT_EMAIL_MISMATCH);
-	}
+	/* X509_NAME_get_text_by_NID (X509_get_issuer_name(peer), NID_pkcs9_emailAddress, certificate_issuer, 256); */
+	printf(FMT_OUTPUT, peer_CN, peer_email);
 	return 1;
 }
 
-static int http_request(ssl)
+static int http_request(ssl, secret, host, port)
 	SSL *ssl;
+	char *secret;
+	char *host;
+	char *port;
 {
+	char *request=0;
+	char buf[1024];
+	int r;
+	int len, request_len;
+
+	/* Now construct our HTTP request */
+	request_len=strlen(secret)+ strlen(host)+6;
+	if(!(request=(char *)malloc(request_len)))
+		err_exit("Couldn't allocate request");
+	snprintf(request,request_len,secret, host,port);
+	puts("Request is:");
+	puts(request);
+
+	/* Find the exact request_len */
+	request_len=strlen(request);
+
+	r=SSL_write(ssl,request,request_len);
+	switch(SSL_get_error(ssl,r)){
+		case SSL_ERROR_NONE:
+			if(request_len!=r)
+				err_exit("Incomplete write!");
+			break;
+		default:
+			berr_exit("SSL write problem");
+	}
+
+	/* Now read the server's response, assuming
+	 *        that it's terminated by a close */
+	while(1){
+		r=SSL_read(ssl,buf,255);
+		switch(SSL_get_error(ssl,r)){
+			case SSL_ERROR_NONE:
+				len=r;
+				break;
+			case SSL_ERROR_ZERO_RETURN:
+				goto shutdown;
+			/* case SSL_ERROR_SYSCALL: */
+			/* 	fprintf(stderr, FMT_INCORRECT_CLOSE); */
+			/* 	goto done; */
+			default:
+				berr_exit("SSL read problem");
+		}
+
+		buf[255] = '\0';
+		fwrite(buf,1,len,stdout);
+	}
+
+shutdown:
+	r=SSL_shutdown(ssl);
+	switch(r){
+		case 1:
+			break; /* Success */
+		case 0:
+		case -1:
+		default:
+			berr_exit("Shutdown failed");
+	}
+
+done:
+	SSL_free(ssl);
+	free(request);
 	return(0);
 }
 
@@ -91,7 +153,6 @@ int main(int argc, char **argv)
 	}
 
 	/*get ip address of the host*/
-
 	host_entry = gethostbyname(host);
 
 	if (!host_entry){
@@ -131,8 +192,8 @@ int main(int argc, char **argv)
 
 	if(check_cert(ssl, EXPECT_HOSTNAME, EXPECT_EMAIL)){
 		puts("check_cert(ssl, host, email) finished!");
-		http_request(ssl);
-		puts("http_request(ssl) finished!");
+		http_request(ssl, secret, host, port);
+		puts("http_request(ssl, secret) finished!");
 	}
 
 	/* this is how you output something for the marker to pick up */
