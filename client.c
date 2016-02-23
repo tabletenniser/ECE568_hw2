@@ -11,7 +11,7 @@
 #include "common.h"
 
 #define HOST "localhost"
-#define PORT 8765
+#define PORT 8778
 
 /* use these strings to tell the marker what is happening */
 #define FMT_CONNECT_ERR "ECE568-CLIENT: SSL connect error\n"
@@ -106,12 +106,13 @@ int main(int argc, char **argv)
 	/* SECURE COMMUNICATION. */
 	SSL_CTX *ctx = initialize_ctx("./alice.pem", "password");
 	SSL_CTX_set_options(ctx, SSL_OP_NO_SSLv2);		// only enable SSLv3 and TLSv1
+	SSL_CTX_set_cipher_list(ctx, "SHA1");		// TODO: check if SSLv3, SSLv2 and TLSv1 should be set here.
 	/* Connect the SSL socket */
 	SSL *ssl = SSL_new(ctx);
 	BIO *sbio = BIO_new_socket(sock, BIO_NOCLOSE);
 	SSL_set_bio(ssl, sbio, sbio);
 	if(SSL_connect(ssl)<=0)
-		berr_exit("SSL connect error");
+		berr_exit(FMT_CONNECT_ERR);
 	if(check_cert(ssl,host))
 		http_request(ssl);
 

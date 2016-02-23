@@ -7,8 +7,11 @@
 #include <netdb.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <openssl/ssl.h>
 
-#define PORT 8765
+#include "common.h"
+
+#define PORT 8778
 
 /* use these strings to tell the marker what is happening */
 #define FMT_ACCEPT_ERR "ECE568-SERVER: SSL accept error\n"
@@ -18,13 +21,12 @@
 
 int main(int argc, char **argv)
 {
-	int s, sock, port=PORT;
+	int s=0, sock, port=PORT;
 	struct sockaddr_in sin;
 	int val=1;
 	pid_t pid;
 
 	/*Parse command line arguments*/
-
 	switch(argc){
 		case 1:
 			break;
@@ -48,25 +50,30 @@ int main(int argc, char **argv)
 
 	memset(&sin,0,sizeof(sin));
 	sin.sin_addr.s_addr=INADDR_ANY;
-	sin.sin_family=AF_INET;
+	sin.sin_family=AF_INET;		// for IP4
 	sin.sin_port=htons(port);
-
 	setsockopt(sock,SOL_SOCKET,SO_REUSEADDR, &val,sizeof(val));
 
-	if(bind(sock,(struct sockaddr *)&sin, sizeof(sin))<0){
+	if(bind(sock,(struct sockaddr *)&sin, sizeof(sin))<0){	// bind a name to a socket (i.e sin to sock)
 		perror("bind");
 		close(sock);
 		exit (0);
 	}
+	printf("Sock: %d", sock);
 
-	if(listen(sock,5)<0){
+	if(listen(sock,5)<0){		// listen on the socket, 5: max number of packets in the incoming queue
 		perror("listen");
 		close(sock);
 		exit (0);
-	} 
+	}
+	SSL_CTX *ctx = initialize_ctx("./bob.pem", "password");
+	/* SSL_CTX_set_options(ctx, SSL_OP_ALL);▸·▸···// enable for all of SSLv2, SSLv3 and TLSv1 */
+	SSL_CTX_set_cipher_list(ctx, "SHA1");		// TODO: check if SSLv2, SSLv3 and TLSv1 should be set here.
+	BIO *sbio = BIO_new_socket(s, BIO_NOCLOSE);
+	SSL *ssl = SSL_new(ctx);
+	SSL_set_bio(ssl, sbio, sbio);
 
 	while(1){
-
 		if((s=accept(sock, NULL, 0))<0){
 			perror("accept");
 			close(sock);
@@ -75,16 +82,17 @@ int main(int argc, char **argv)
 		}
 
 		/*fork a child to handle the connection*/
-
 		if((pid=fork())){
 			close(s);
 		}
 		else {
 			/*Child code*/
+			if (SSL_accept(ssl) <= 0)
+				berr_exit("SSL accept error");
+
 			int len;
 			char buf[256];
 			char *answer = "42";
-
 			len = recv(s, &buf, 255, 0);
 			buf[len]= '\0';
 			printf(FMT_OUTPUT, buf, answer);
