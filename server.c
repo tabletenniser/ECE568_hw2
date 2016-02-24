@@ -22,8 +22,9 @@
 #define FMT_NO_VERIFY "ECE568-SERVER: Certificate does not verify\n"
 #define FMT_INCOMPLETE_CLOSE "ECE568-SERVER: Incomplete shutdown\n"
 
-static int http_request(ssl, answer)
+static int http_request(ssl, s, answer)
 	SSL *ssl;
+	int s;
 	char *answer;
 {
 	int len, r;
@@ -37,21 +38,49 @@ static int http_request(ssl, answer)
 		case SSL_ERROR_NONE:
 			len = r;
 			break;
+		case SSL_ERROR_ZERO_RETURN:
+			goto shutdown;
+		case SSL_ERROR_SYSCALL:
+			fprintf(stderr, FMT_INCOMPLETE_CLOSE);
+			goto done;
 		default:
 			berr_exit("SSL read problem");
 	}
 
 	printf(FMT_OUTPUT, buf, answer);
-	len = strlen(answer);
+	len = strlen(answer)+1;		// For '\0' character
 	r = SSL_write(ssl, answer, len);
 	switch (SSL_get_error(ssl, r)) {
 		case SSL_ERROR_NONE:
 			if (len != r)
 				err_exit("Incomplete write!");
 			break;
+		case SSL_ERROR_ZERO_RETURN:
+			goto shutdown;
+		case SSL_ERROR_SYSCALL:
+			fprintf(stderr, FMT_INCOMPLETE_CLOSE);
+			goto done;
 		default:
 			berr_exit("SSL write problem");
 	}
+shutdown:
+	r=SSL_shutdown(ssl);
+	if(r==0){		// SSL_shutdown fails because requiring a bidirectional shutdown.
+		shutdown(s,1);
+		r=SSL_shutdown(ssl);
+	}
+	switch(r){
+		case 1:
+			break; /* Success */
+		case 0:
+		case -1:
+		default:
+			printf("%d", r);
+			berr_exit("Shutdown failed");
+	}
+
+done:
+	SSL_free(ssl);
 	return 0;
 }
 
@@ -118,7 +147,6 @@ int main(int argc, char **argv)
 		close(sock);
 		exit (0);
 	}
-	puts("sock");
 
 	if(listen(sock,5)<0){		// listen on the socket, 5: max number of packets in the incoming queue
 		perror("listen");
@@ -146,25 +174,20 @@ int main(int argc, char **argv)
 			BIO *sbio = BIO_new_socket(s, BIO_NOCLOSE);
 			SSL *ssl = SSL_new(ctx);
 			SSL_set_bio(ssl, sbio, sbio);
-			puts("Before SSL_accept(ssl)");
 			if (SSL_accept(ssl) <= 0)
 				berr_exit("SSL accept error");
-			puts("After SSL_accept(ssl)");
 
 			char *answer = "42";
-			puts("Before check_cert()");
 			check_cert(ssl, EXPECT_HOSTNAME, EXPECT_EMAIL);
-			puts("After check_cert()");
 			/* Read the packet into buf using ssl, and write the answer back */
-			http_request(ssl, answer);
-			puts("After http_request()");
+			http_request(ssl, s, answer);
 
 			/* OLD COMMUNICATION CODE WITHOUT SSL */
 			/* len = recv(s, &buf, 255, 0); */
 			/* buf[len]= '\0'; */
 			/* send(s, answer, strlen(answer), 0); */
-			close(sock);
-			close(s);
+			/* close(sock); */
+			/* close(s); */
 			return 0;
 		}
 	}

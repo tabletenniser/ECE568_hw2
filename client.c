@@ -24,15 +24,15 @@
 #define FMT_NO_VERIFY "ECE568-CLIENT: Certificate does not verify\n"
 #define FMT_INCORRECT_CLOSE "ECE568-CLIENT: Premature close\n"
 
-int check_cert(ssl,host,email,certificate_issuer)
+int check_cert(ssl,host,email)
 	SSL *ssl;
 	char *host;
 	char *email;
-	char *certificate_issuer;
 {
 	X509 *peer;
 	char peer_CN[256];
 	char peer_email[256];
+	char certificate_issuer[256];
 
 	if(SSL_get_verify_result(ssl)!=X509_V_OK){
 		printf("SSL_get_verify_result(ssl): %ld", SSL_get_verify_result(ssl));
@@ -51,8 +51,16 @@ int check_cert(ssl,host,email,certificate_issuer)
 		err_exit(FMT_CN_MISMATCH);
 	}
 
-	/* X509_NAME_get_text_by_NID (X509_get_issuer_name(peer), NID_pkcs9_emailAddress, certificate_issuer, 256); */
-	printf(FMT_OUTPUT, peer_CN, peer_email);
+	/*Check the email*/
+	X509_NAME_get_text_by_NID (X509_get_subject_name(peer), NID_pkcs9_emailAddress, peer_email, 256);
+	if(strcasecmp(peer_email,email)){
+		printf("Expect email: %s; Got email: %s.", email, peer_email);
+		err_exit(FMT_EMAIL_MISMATCH);
+	}
+
+	/*Check the certificate issuer*/
+	X509_NAME_get_text_by_NID (X509_get_issuer_name(peer), NID_commonName, certificate_issuer, 256);
+	printf(FMT_SERVER_INFO, peer_CN, peer_email, certificate_issuer);
 	return 1;
 }
 
@@ -72,8 +80,6 @@ static int http_request(ssl, secret, host, port)
 	if(!(request=(char *)malloc(request_len)))
 		err_exit("Couldn't allocate request");
 	snprintf(request,request_len,secret, host,port);
-	puts("Request is:");
-	puts(request);
 
 	/* Find the exact request_len */
 	request_len=strlen(request);
@@ -84,6 +90,11 @@ static int http_request(ssl, secret, host, port)
 			if(request_len!=r)
 				err_exit("Incomplete write!");
 			break;
+		case SSL_ERROR_ZERO_RETURN:
+			goto shutdown;
+		case SSL_ERROR_SYSCALL:
+			fprintf(stderr, FMT_INCORRECT_CLOSE);
+			goto done;
 		default:
 			berr_exit("SSL write problem");
 	}
@@ -98,15 +109,15 @@ static int http_request(ssl, secret, host, port)
 				break;
 			case SSL_ERROR_ZERO_RETURN:
 				goto shutdown;
-			/* case SSL_ERROR_SYSCALL: */
-			/* 	fprintf(stderr, FMT_INCORRECT_CLOSE); */
-			/* 	goto done; */
+			case SSL_ERROR_SYSCALL:
+				fprintf(stderr, FMT_INCORRECT_CLOSE);
+				goto done;
 			default:
-				berr_exit("SSL read problem");
+				break;
 		}
 
 		buf[255] = '\0';
-		fwrite(buf,1,len,stdout);
+		printf(FMT_OUTPUT, request, buf);
 	}
 
 shutdown:
@@ -132,7 +143,7 @@ int main(int argc, char **argv)
 	char *host=HOST;
 	struct sockaddr_in addr;
 	struct hostent *host_entry;
-	char buf[256];
+	/* char buf[256]; */
 	char *secret = "What's the question?";
 
 	/*Parse command line arguments*/
@@ -185,19 +196,15 @@ int main(int argc, char **argv)
 	SSL *ssl = SSL_new(ctx);
 	BIO *sbio = BIO_new_socket(sock, BIO_NOCLOSE);
 	SSL_set_bio(ssl, sbio, sbio);
-	puts("Before SSL_connect(ssl)");
 	if(SSL_connect(ssl)<=0)
 		berr_exit(FMT_CONNECT_ERR);
-	puts("SSL_connect(ssl) finished!");
 
 	if(check_cert(ssl, EXPECT_HOSTNAME, EXPECT_EMAIL)){
-		puts("check_cert(ssl, host, email) finished!");
 		http_request(ssl, secret, host, port);
-		puts("http_request(ssl, secret) finished!");
 	}
 
 	/* this is how you output something for the marker to pick up */
-	printf(FMT_OUTPUT, secret, buf);
+	/* printf(FMT_OUTPUT, secret, buf); */
 
 	destroy_ctx(ctx);
 	close(sock);
