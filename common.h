@@ -13,6 +13,7 @@
 #include <signal.h>
 #include <unistd.h>
 #include <string.h>
+#include <stdbool.h>
 
 #include <openssl/ssl.h>
 
@@ -22,7 +23,7 @@ extern BIO *bio_err;
 int berr_exit (char *string);
 int err_exit(char *string);
 
-SSL_CTX *initialize_ctx(char *keyfile, char *password);
+SSL_CTX *initialize_ctx(char *keyfile, char *password, bool hack_no_CA);
 void destroy_ctx(SSL_CTX *ctx);
 
 #ifndef ALLOW_OLD_VERSIONS

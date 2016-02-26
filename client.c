@@ -8,6 +8,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <openssl/ssl.h>
+#include <stdbool.h>
 #include "common.h"
 
 #define HOST "localhost"
@@ -35,7 +36,6 @@ int check_cert(ssl,host,email)
 	char certificate_issuer[256];
 
 	if(SSL_get_verify_result(ssl)!=X509_V_OK){
-		printf("SSL_get_verify_result(ssl): %ld", SSL_get_verify_result(ssl));
 		berr_exit(FMT_NO_VERIFY);
 	}
 
@@ -45,6 +45,11 @@ int check_cert(ssl,host,email)
 
 	/*Check the common name*/
 	peer=SSL_get_peer_certificate(ssl);
+    if (peer == NULL){
+        //TODO: print proper format
+        berr_exit("SSL no certificate");
+    }
+
 	X509_NAME_get_text_by_NID (X509_get_subject_name(peer), NID_commonName, peer_CN, 256);
 	if(strcasecmp(peer_CN,host)){
 		printf("Expect name: %s; Got name: %s.", host, peer_CN);
@@ -189,7 +194,7 @@ int main(int argc, char **argv)
 	/* buf[len]='\0'; */
 
 	/* SECURE COMMUNICATION. */
-	SSL_CTX *ctx = initialize_ctx("./alice.pem", "password");
+	SSL_CTX *ctx = initialize_ctx("./alice.pem", "password", false);
 	SSL_CTX_set_options(ctx, SSL_OP_NO_SSLv2);		// only enable SSLv3 and TLSv1
 	SSL_CTX_set_cipher_list(ctx, "SHA1");		// TODO: check if SSLv3, SSLv2 and TLSv1 should be set here.
 	/* Connect the SSL socket */

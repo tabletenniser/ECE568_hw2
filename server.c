@@ -1,4 +1,3 @@
-#include <unistd.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -8,15 +7,18 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <openssl/ssl.h>
+#include <openssl/err.h>
+#include <stdbool.h>
 
 #include "common.h"
 
 #define EXPECT_HOSTNAME "Alice's client"
 #define EXPECT_EMAIL "ece568alice@ecf.utoronto.ca"
+#define EXPECT_CA "ECE568 Certificate Authority"
 #define PORT 8778
 
 /* use these strings to tell the marker what is happening */
-#define FMT_ACCEPT_ERR "ECE568-SERVER: SSL accept error\n"
+#define FMT_ACCEPT_ERR "ECE568-SERVER: SSL accept error "
 #define FMT_CLIENT_INFO "ECE568-SERVER: %s %s\n"
 #define FMT_OUTPUT "ECE568-SERVER: %s %s\n"
 #define FMT_NO_VERIFY "ECE568-SERVER: Certificate does not verify\n"
@@ -92,17 +94,29 @@ int check_cert(ssl,host,email)
 	X509 *peer;
 	char peer_CN[256];
 	char peer_email[256];
+    char certificate_issuer[256];
 
 	if(SSL_get_verify_result(ssl)!=X509_V_OK){
 		printf("SSL_get_verify_result(ssl): %ld", SSL_get_verify_result(ssl));
 		berr_exit(FMT_NO_VERIFY);
 	}
 
-	/*Check the cert chain. The chain length
-	 *       is automatically checked by OpenSSL when
-	 *             we set the verify depth in the ctx */
+    // get and print CN, Email and CA
+	peer=SSL_get_peer_certificate(ssl);
+    if (peer == NULL){
+        berr_exit(FMT_ACCEPT_ERR);
+    }
 
-	/*TODO: Check if the server needs to verify  the common name and email.*/
+	X509_NAME_get_text_by_NID (X509_get_subject_name(peer), NID_commonName, peer_CN, 256);
+	X509_NAME_get_text_by_NID (X509_get_subject_name(peer), NID_pkcs9_emailAddress, peer_email, 256);
+    X509_NAME_get_text_by_NID (X509_get_issuer_name(peer), NID_commonName, certificate_issuer, 256);
+
+	if(strcasecmp(certificate_issuer,EXPECT_CA)){
+		err_exit(FMT_CN_MISMATCH);
+	}
+
+    printf(FMT_CLIENT_INFO, peer_CN, peer_email);
+
 	return 1;
 }
 
@@ -168,14 +182,18 @@ int main(int argc, char **argv)
 		}
 		else {
 			/*Child code*/
-			SSL_CTX *ctx = initialize_ctx("./bob.pem", "password");
+			SSL_CTX *ctx = initialize_ctx("./bob.pem", "password", false);
 			/* SSL_CTX_set_options(ctx, SSL_OP_ALL);▸·▸···// enable for all of SSLv2, SSLv3 and TLSv1 */
 			SSL_CTX_set_cipher_list(ctx, "SHA1");		// TODO: check if SSLv2, SSLv3 and TLSv1 should be set here.
 			BIO *sbio = BIO_new_socket(s, BIO_NOCLOSE);
 			SSL *ssl = SSL_new(ctx);
 			SSL_set_bio(ssl, sbio, sbio);
-			if (SSL_accept(ssl) <= 0)
-				berr_exit("SSL accept error");
+            SSL_set_verify(ssl, SSL_VERIFY_PEER|SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
+
+			if (SSL_accept(ssl) <= 0){
+                // TODO: Print proper error msg
+				berr_exit(FMT_ACCEPT_ERR);
+            }
 
 			char *answer = "42";
 			check_cert(ssl, EXPECT_HOSTNAME, EXPECT_EMAIL);
@@ -195,3 +213,6 @@ int main(int argc, char **argv)
 	close(sock);
 	return 1;
 }
+
+
+

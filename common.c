@@ -1,5 +1,6 @@
 #include "common.h"
 #include <openssl/err.h>
+#include <stdbool.h>
 
 
 BIO *bio_err=0;
@@ -20,7 +21,7 @@ int err_exit(string)
 int berr_exit(string)
 	char *string;
 {
-	BIO_printf(bio_err,"%s\n",string);
+	BIO_printf(bio_err,"%s",string);
 	ERR_print_errors(bio_err);
 	exit(0);
 }
@@ -39,9 +40,10 @@ static int password_cb(char *buf,int num,
 static void sigpipe_handle(int x){
 }
 
-SSL_CTX *initialize_ctx(keyfile,password)
+SSL_CTX *initialize_ctx(keyfile,password,hack_no_CA)
 	char *keyfile;
 	char *password;
+    bool hack_no_CA;
 {
 	SSL_METHOD *meth;
 	SSL_CTX *ctx;
@@ -62,22 +64,24 @@ SSL_CTX *initialize_ctx(keyfile,password)
 	meth=SSLv23_method();
 	ctx=SSL_CTX_new(meth);
 
-	/* Load our keys and certificates*/
-	if(!(SSL_CTX_use_certificate_chain_file(ctx, keyfile)))
-		berr_exit("Can't read certificate file");
+    if (!hack_no_CA){
+    	/* Load our keys and certificates*/
+    	if(!(SSL_CTX_use_certificate_chain_file(ctx, keyfile)))
+    		berr_exit("Can't read certificate file");
 
-	pass=password;
-	SSL_CTX_set_default_passwd_cb(ctx, password_cb);
-	if(!(SSL_CTX_use_PrivateKey_file(ctx, keyfile,SSL_FILETYPE_PEM)))
-		berr_exit("Can't read key file");
-
-	/* Load the 568ca.pem*/
-	if(!(SSL_CTX_load_verify_locations(ctx, CA_LIST,0)))
-		berr_exit("Can't read CA list");
-
-#if (OPENSSL_VERSION_NUMBER < 0x00905100L)
-	SSL_CTX_set_verify_depth(ctx,1);
-#endif
+    	pass=password;
+    	SSL_CTX_set_default_passwd_cb(ctx, password_cb);
+    	if(!(SSL_CTX_use_PrivateKey_file(ctx, keyfile,SSL_FILETYPE_PEM)))
+    		berr_exit("Can't read key file");
+    
+    	/* Load the 568ca.pem*/
+    	if(!(SSL_CTX_load_verify_locations(ctx, CA_LIST,0)))
+    		berr_exit("Can't read CA list");
+    
+        #if (OPENSSL_VERSION_NUMBER < 0x00905100L)
+    	SSL_CTX_set_verify_depth(ctx,1);
+        #endif
+    }
 
 	return ctx;
 }
