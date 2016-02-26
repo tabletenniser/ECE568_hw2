@@ -94,10 +94,8 @@ int check_cert(ssl,host,email)
 	X509 *peer;
 	char peer_CN[256];
 	char peer_email[256];
-    char certificate_issuer[256];
 
 	if(SSL_get_verify_result(ssl)!=X509_V_OK){
-		printf("SSL_get_verify_result(ssl): %ld", SSL_get_verify_result(ssl));
 		berr_exit(FMT_NO_VERIFY);
 	}
 
@@ -109,11 +107,6 @@ int check_cert(ssl,host,email)
 
 	X509_NAME_get_text_by_NID (X509_get_subject_name(peer), NID_commonName, peer_CN, 256);
 	X509_NAME_get_text_by_NID (X509_get_subject_name(peer), NID_pkcs9_emailAddress, peer_email, 256);
-    X509_NAME_get_text_by_NID (X509_get_issuer_name(peer), NID_commonName, certificate_issuer, 256);
-
-	if(strcasecmp(certificate_issuer,EXPECT_CA)){
-		err_exit(FMT_CN_MISMATCH);
-	}
 
     printf(FMT_CLIENT_INFO, peer_CN, peer_email);
 
@@ -168,6 +161,10 @@ int main(int argc, char **argv)
 		exit (0);
 	}
 
+    SSL_CTX *ctx = initialize_ctx("./bob.pem", "password", false);
+    /* SSL_CTX_set_options(ctx, SSL_OP_ALL);▸·▸···// enable for all of SSLv2, SSLv3 and TLSv1 */
+    SSL_CTX_set_cipher_list(ctx, "SHA1");		// TODO: check if SSLv2, SSLv3 and TLSv1 should be set here.
+
 	while(1){
 		if((s=accept(sock, NULL, 0))<0){
 			perror("accept");
@@ -182,9 +179,6 @@ int main(int argc, char **argv)
 		}
 		else {
 			/*Child code*/
-			SSL_CTX *ctx = initialize_ctx("./bob.pem", "password", false);
-			/* SSL_CTX_set_options(ctx, SSL_OP_ALL);▸·▸···// enable for all of SSLv2, SSLv3 and TLSv1 */
-			SSL_CTX_set_cipher_list(ctx, "SHA1");		// TODO: check if SSLv2, SSLv3 and TLSv1 should be set here.
 			BIO *sbio = BIO_new_socket(s, BIO_NOCLOSE);
 			SSL *ssl = SSL_new(ctx);
 			SSL_set_bio(ssl, sbio, sbio);

@@ -195,8 +195,8 @@ int main(int argc, char **argv)
 
 	/* SECURE COMMUNICATION. */
 	SSL_CTX *ctx = initialize_ctx("./alice.pem", "password", false);
-	SSL_CTX_set_options(ctx, SSL_OP_NO_SSLv2);		// only enable SSLv3 and TLSv1
-	SSL_CTX_set_cipher_list(ctx, "SHA1");		// TODO: check if SSLv3, SSLv2 and TLSv1 should be set here.
+	SSL_CTX_set_options(ctx, SSL_OP_NO_SSLv2);	
+	SSL_CTX_set_cipher_list(ctx, "SHA1");		
 	/* Connect the SSL socket */
 	SSL *ssl = SSL_new(ctx);
 	BIO *sbio = BIO_new_socket(sock, BIO_NOCLOSE);
