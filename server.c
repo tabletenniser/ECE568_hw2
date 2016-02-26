@@ -190,8 +190,8 @@ int main(int argc, char **argv)
 			SSL_set_bio(ssl, sbio, sbio);
             SSL_set_verify(ssl, SSL_VERIFY_PEER|SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
 
+            // Check if the certificate exists AND CA is valid
 			if (SSL_accept(ssl) <= 0){
-                // TODO: Print proper error msg
 				berr_exit(FMT_ACCEPT_ERR);
             }
 
