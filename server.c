@@ -162,7 +162,7 @@ int main(int argc, char **argv)
 	}
 
     SSL_CTX *ctx = initialize_ctx("./bob.pem", "password", false);
-    /* SSL_CTX_set_options(ctx, SSL_OP_ALL);▸·▸···// enable for all of SSLv2, SSLv3 and TLSv1 */
+    SSL_CTX_set_options(ctx, SSL_OP_ALL);
     SSL_CTX_set_cipher_list(ctx, "SHA1");		// TODO: check if SSLv2, SSLv3 and TLSv1 should be set here.
 
 	while(1){

@@ -46,20 +46,17 @@ int check_cert(ssl,host,email)
 	/*Check the common name*/
 	peer=SSL_get_peer_certificate(ssl);
     if (peer == NULL){
-        //TODO: print proper format
-        berr_exit("SSL no certificate");
+		berr_exit(FMT_NO_VERIFY);
     }
 
 	X509_NAME_get_text_by_NID (X509_get_subject_name(peer), NID_commonName, peer_CN, 256);
 	if(strcasecmp(peer_CN,host)){
-		printf("Expect name: %s; Got name: %s.", host, peer_CN);
 		err_exit(FMT_CN_MISMATCH);
 	}
 
 	/*Check the email*/
 	X509_NAME_get_text_by_NID (X509_get_subject_name(peer), NID_pkcs9_emailAddress, peer_email, 256);
 	if(strcasecmp(peer_email,email)){
-		printf("Expect email: %s; Got email: %s.", email, peer_email);
 		err_exit(FMT_EMAIL_MISMATCH);
 	}
 
@@ -197,6 +194,7 @@ int main(int argc, char **argv)
 	SSL_CTX *ctx = initialize_ctx("./alice.pem", "password", false);
 	SSL_CTX_set_options(ctx, SSL_OP_NO_SSLv2);	
 	SSL_CTX_set_cipher_list(ctx, "SHA1");		
+
 	/* Connect the SSL socket */
 	SSL *ssl = SSL_new(ctx);
 	BIO *sbio = BIO_new_socket(sock, BIO_NOCLOSE);
